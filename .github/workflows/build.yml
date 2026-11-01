@@ -10,7 +10,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Install NDK and CMake
+      - name: Install NDK
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
@@ -21,5 +21,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Dropper-APK
+          name: Dropper-APT
           path: app/build/outputs/apk/debug/app-debug.apk
