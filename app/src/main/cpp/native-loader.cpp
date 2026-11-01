@@ -1,5 +1,4 @@
 #include <jni.h>
-#include <string>
 #include <android/log.h>
 
 #define LOG_TAG "NativeLoader"
@@ -10,7 +9,6 @@ Java_com_phantom_loader_MainActivity_decryptDex(JNIEnv* env, jobject /* this */,
     jsize len = env->GetArrayLength(encryptedDex);
     jbyte* data = env->GetByteArrayElements(encryptedDex, nullptr);
     
-    // Simulação de descriptografia (O ideal aqui é usar AES em C++, mas para compilar e testar o fluxo, vamos apenas copiar)
     jbyteArray result = env->NewByteArray(len);
     env->SetByteArrayRegion(result, 0, len, data);
     
