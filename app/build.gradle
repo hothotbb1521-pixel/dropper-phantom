@@ -5,32 +5,25 @@ android {
     defaultConfig {
         applicationId "com.phantom.loader"
         minSdk 26
-        targetSdk 32 // Rebaixado para furar trava do Android 13
+        targetSdk 32
         versionCode 1
         versionName "1.0"
-        
-        // Habilita o NDK
-        externalNativeBuild {
-            cmake {
-                cppFlags ""
-            }
-        }
-        ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
-        }
     }
-    
-    // Configura o caminho do CMake
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.18.1"
-        }
-    }
-    
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+    // Habilita o NDK
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
     }
 }
 dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
